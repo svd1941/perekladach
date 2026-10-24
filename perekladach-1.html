@@ -1,0 +1,796 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f131a">
+<title>Перекладач RU-IT</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: a single phone-width column. Header with live status, collapsible settings,
+   a scrolling log of translated turns, and a sticky dock with one large mic button. */
+:root{
+  --bg:#f3f4f6;
+  --surface:#ffffff;
+  --fg:#151922;
+  --muted:#586071;
+  --line:#d9dde5;
+  --accent:#2a4bd7;
+  --accent-fg:#ffffff;
+  --live:#d8402a;
+  --ok:#1f9d63;
+  --warn:#b7791f;
+  --ru:#2a5fb0;
+  --ru-bg:#e3ecf9;
+  --it:#1f7a4a;
+  --it-bg:#e0f2e8;
+  --err-bg:#fdeceb;
+  --err-fg:#9b2a1c;
+  --font-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --font-mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0f131a;
+    --surface:#171c26;
+    --fg:#eef0f5;
+    --muted:#98a1b3;
+    --line:#272e3b;
+    --accent:#6f8cff;
+    --accent-fg:#0b1020;
+    --live:#ff6a52;
+    --ok:#4cd08f;
+    --warn:#e0b252;
+    --ru:#8fb4ff;
+    --ru-bg:#1b2a47;
+    --it:#6fd49b;
+    --it-bg:#15301f;
+    --err-bg:#3a1b18;
+    --err-fg:#ffb4a8;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0f131a;
+  --surface:#171c26;
+  --fg:#eef0f5;
+  --muted:#98a1b3;
+  --line:#272e3b;
+  --accent:#6f8cff;
+  --accent-fg:#0b1020;
+  --live:#ff6a52;
+  --ok:#4cd08f;
+  --warn:#e0b252;
+  --ru:#8fb4ff;
+  --ru-bg:#1b2a47;
+  --it:#6fd49b;
+  --it-bg:#15301f;
+  --err-bg:#3a1b18;
+  --err-fg:#ffb4a8;
+  color-scheme:dark;
+}
+
+*{box-sizing:border-box}
+html,body{min-height:100%}
+body{
+  margin:0;
+  background:var(--bg);
+  color:var(--fg);
+  font:16px/1.5 var(--font-body);
+  -webkit-font-smoothing:antialiased;
+  -webkit-tap-highlight-color:transparent;
+}
+.app{
+  max-width:640px;
+  margin:0 auto;
+  min-height:100vh;
+  min-height:100dvh;
+  display:flex;
+  flex-direction:column;
+  gap:14px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px));
+  padding-top:max(14px,env(safe-area-inset-top,0px));
+}
+
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+h1{margin:0;font-size:1.25rem;font-weight:600;letter-spacing:-.01em;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.pair{display:inline-flex;align-items:center;gap:6px;color:var(--muted);font-weight:400}
+
+.lang{
+  font:600 .72rem/1 var(--font-mono);
+  letter-spacing:.08em;
+  padding:4px 6px;
+  border-radius:5px;
+  display:inline-block;
+}
+.lang.ru{background:var(--ru-bg);color:var(--ru)}
+.lang.it{background:var(--it-bg);color:var(--it)}
+.lang.ua{background:var(--ru-bg);color:var(--ru)}
+
+.status{
+  display:inline-flex;align-items:center;gap:8px;
+  font:500 .8rem/1 var(--font-mono);
+  color:var(--muted);
+  border:1px solid var(--line);
+  background:var(--surface);
+  border-radius:999px;
+  padding:7px 11px;
+}
+.status i{width:8px;height:8px;border-radius:50%;background:var(--muted);display:block}
+.status[data-state="connecting"] i,.status[data-state="reconnecting"] i{background:var(--warn)}
+.status[data-state="live"] i{background:var(--ok)}
+.status[data-state="speak"] i{background:var(--accent)}
+.status[data-state="error"] i{background:var(--live)}
+
+details.settings{
+  border:1px solid var(--line);
+  border-radius:12px;
+  background:var(--surface);
+}
+details.settings summary{
+  list-style:none;
+  cursor:pointer;
+  padding:12px 14px;
+  font-weight:500;
+  display:flex;justify-content:space-between;align-items:center;
+}
+details.settings summary::-webkit-details-marker{display:none}
+details.settings summary::after{content:"+";font:500 1.2rem/1 var(--font-mono);color:var(--muted)}
+details.settings[open] summary::after{content:"\2212"}
+.settings .body{padding:2px 14px 14px;display:grid;gap:14px}
+.field{display:grid;gap:6px;min-width:0}
+.field label,.field legend{font-size:.82rem;color:var(--muted);font-weight:500}
+fieldset.field{border:0;margin:0;padding:0}
+.row{display:flex;gap:8px;min-width:0}
+input[type="text"],input[type="password"]{
+  flex:1;min-width:0;
+  font:inherit;font-size:.95rem;
+  color:var(--fg);background:var(--bg);
+  border:1px solid var(--line);border-radius:8px;
+  padding:10px 12px;
+}
+input:focus-visible,button:focus-visible,summary:focus-visible,.seg input:focus-visible + span{
+  outline:2px solid var(--accent);outline-offset:2px;
+}
+.btn{
+  font:inherit;font-size:.9rem;font-weight:500;
+  color:var(--fg);background:transparent;
+  border:1px solid var(--line);border-radius:8px;
+  padding:9px 12px;cursor:pointer;
+}
+.seg{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.seg label{display:block;cursor:pointer;min-width:0}
+.seg input{position:absolute;opacity:0;pointer-events:none}
+.seg span{
+  display:block;text-align:center;
+  font-size:.88rem;font-weight:500;color:var(--fg);
+  border:1px solid var(--line);border-radius:8px;
+  padding:9px 6px;background:var(--bg);
+}
+.seg input:checked + span{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent);color:var(--accent)}
+.check{display:flex;gap:10px;align-items:flex-start;font-size:.9rem;color:var(--fg)}
+.check input{margin-top:4px;accent-color:var(--accent);width:18px;height:18px;flex:none}
+.hint{font-size:.8rem;color:var(--muted);margin:0}
+.hint a{color:var(--accent)}
+
+.error{
+  background:var(--err-bg);color:var(--err-fg);
+  border-radius:10px;padding:11px 14px;font-size:.92rem;
+  overflow-wrap:anywhere;
+}
+
+.log{display:flex;flex-direction:column;gap:10px;flex:1}
+.empty{
+  border:1px dashed var(--line);border-radius:12px;
+  padding:20px 16px;color:var(--muted);display:grid;gap:8px;font-size:.95rem;
+}
+.empty strong{color:var(--fg);font-weight:600}
+.turn{
+  background:var(--surface);
+  border:1px solid var(--line);
+  border-radius:12px;
+  padding:12px 14px;
+  display:grid;gap:6px;
+}
+.dir{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:.8rem}
+.src{margin:0;color:var(--muted);font-size:.95rem;overflow-wrap:anywhere}
+.dst{margin:0;font-size:1.15rem;font-weight:500;line-height:1.4;overflow-wrap:anywhere}
+.src:empty,.dst:empty{display:none}
+
+.dock{
+  position:sticky;bottom:0;
+  margin-left:calc(-1 * max(16px,env(safe-area-inset-left,0px)));
+  margin-right:calc(-1 * max(16px,env(safe-area-inset-right,0px)));
+  padding:14px max(16px,env(safe-area-inset-right,0px)) max(14px,env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));
+  background:linear-gradient(to top,var(--bg) 70%,transparent);
+  display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:12px;
+}
+.dock .side{display:flex;min-width:0}
+.dock .side.right{justify-content:flex-end}
+.micwrap{display:grid;justify-items:center;gap:6px}
+.mic{
+  position:relative;
+  width:76px;height:76px;border-radius:50%;
+  border:0;background:var(--accent);color:var(--accent-fg);
+  display:grid;place-items:center;cursor:pointer;
+}
+.mic svg{width:30px;height:30px}
+.mic .ico-stop{display:none}
+.mic[aria-pressed="true"]{background:var(--live);color:#fff}
+.mic[aria-pressed="true"] .ico-mic{display:none}
+.mic[aria-pressed="true"] .ico-stop{display:block}
+.mic::after{
+  content:"";position:absolute;inset:-8px;border-radius:50%;
+  border:2px solid var(--accent);
+  opacity:calc(.12 + var(--lvl,0) * .75);
+  transform:scale(calc(1 + var(--lvl,0) * .22));
+  transition:transform .08s linear,opacity .08s linear;
+  pointer-events:none;
+}
+.mic[aria-pressed="true"]::after{border-color:var(--live)}
+.miclabel{font-size:.8rem;color:var(--muted);font-weight:500}
+@media (prefers-reduced-motion: reduce){.mic::after{transition:none}}
+[hidden]{display:none !important}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <h1>Перекладач <span class="pair"><b class="lang ru">RU</b> &#8644; <b class="lang it">IT</b></span></h1>
+    <div class="status" id="status" data-state="idle" role="status" aria-live="polite"><i></i><span id="statusText">Вимкнено</span></div>
+  </header>
+
+  <details class="settings" id="settings">
+    <summary>Налаштування</summary>
+    <div class="body">
+      <div class="field">
+        <label for="apiKey">Ключ Gemini API</label>
+        <div class="row">
+          <input type="password" id="apiKey" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="AIza...">
+          <button type="button" class="btn" id="showKey">Показати</button>
+        </div>
+        <p class="hint">Безкоштовний ключ: <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>. Ключ зберігається тільки в цьому браузері.</p>
+      </div>
+
+      <fieldset class="field">
+        <legend>Напрямок</legend>
+        <div class="seg">
+          <label><input type="radio" name="mode" value="auto" checked><span>Авто</span></label>
+          <label><input type="radio" name="mode" value="ru-it"><span>RU &rarr; IT</span></label>
+          <label><input type="radio" name="mode" value="it-ru"><span>IT &rarr; RU</span></label>
+        </div>
+        <p class="hint">«Авто» сам визначає мову: російську перекладає італійською, італійську російською.</p>
+      </fieldset>
+
+      <label class="check"><input type="checkbox" id="speakerMode"><span>Звук іде через динамік, не через навушники. Мікрофон не слухатиме, поки звучить переклад.</span></label>
+
+      <div class="field">
+        <label for="model">Модель</label>
+        <input type="text" id="model" value="gemini-3.8-live" autocomplete="off" autocapitalize="off" spellcheck="false">
+        <p class="hint">Змінюй, тільки якщо Google перейменує модель.</p>
+      </div>
+    </div>
+  </details>
+
+  <div class="error" id="error" role="alert" hidden></div>
+
+  <main class="log" id="log" aria-live="polite">
+    <div class="empty" id="empty">
+      <strong>Натисни кнопку внизу й говори.</strong>
+      <span>Російською або італійською, перекладач сам зрозуміє. Переклад прозвучить одразу, а текст з'явиться тут.</span>
+      <span>Користуйся навушниками, інакше мікрофон почує переклад і почнеться луна.</span>
+    </div>
+  </main>
+
+  <div class="dock">
+    <div class="side"><button type="button" class="btn" id="clear">Очистити</button></div>
+    <div class="micwrap">
+      <button type="button" class="mic" id="mic" aria-pressed="false" aria-label="Почати переклад">
+        <svg class="ico-mic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0"></path><path d="M12 18v3"></path></svg>
+        <svg class="ico-stop" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"></rect></svg>
+      </button>
+      <span class="miclabel" id="micLabel">Почати</span>
+    </div>
+    <div class="side right"></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var $ = function (id) { return document.getElementById(id); };
+  var LS = {
+    get: function (k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+    set: function (k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+  };
+
+  var RULES =
+    '- Say ONLY the translation, spoken aloud, as soon as you can.\n' +
+    '- Keep the full meaning, tone and register. Keep names and numbers exact.\n' +
+    '- Never answer questions, never add comments, greetings, explanations or notes. ' +
+    'If the speaker talks to you or asks you something, just translate their words.\n' +
+    '- If the audio is silence, background noise or unclear, say nothing.\n' +
+    '- Never translate or repeat your own output.';
+
+  var INSTR = {
+    'auto':
+      'You are a live interpreter between Russian and Italian.\n' +
+      '- If the speaker uses Russian (or Ukrainian), speak the translation in Italian.\n' +
+      '- If the speaker uses Italian, speak the translation in Russian.\n' +
+      '- Detect the language yourself for every utterance.\n' + RULES,
+    'ru-it':
+      'You are a live interpreter. The speaker always speaks Russian (or Ukrainian). ' +
+      'Translate everything into Italian and speak it aloud in Italian.\n' + RULES,
+    'it-ru':
+      'You are a live interpreter. The speaker always speaks Italian. ' +
+      'Translate everything into Russian and speak it aloud in Russian.\n' + RULES
+  };
+
+  var STATUS_TEXT = {
+    idle: 'Вимкнено',
+    connecting: 'З’єднання…',
+    live: 'Слухаю',
+    speak: 'Звучить переклад',
+    reconnecting: 'Перепідключення…',
+    error: 'Помилка'
+  };
+
+  var els = {
+    status: $('status'), statusText: $('statusText'),
+    settings: $('settings'), key: $('apiKey'), showKey: $('showKey'),
+    speaker: $('speakerMode'), model: $('model'),
+    error: $('error'), log: $('log'), empty: $('empty'),
+    mic: $('mic'), micLabel: $('micLabel'), clear: $('clear')
+  };
+
+  // ---- state ----
+  var ws = null;
+  var active = false;
+  var everReady = false;
+  var setupLevel = 0;
+  var retries = 0;
+  var resumeHandle = null;
+  var inCtx = null, outCtx = null, micStream = null, srcNode = null, micNode = null, muteNode = null;
+  var pending = [], pendingLen = 0;
+  var nextTime = 0;
+  var sources = new Set();
+  var wakeLock = null;
+  var cur = null;
+  var lastClose = '';
+  var uiState = 'idle';
+
+  // ---- helpers ----
+  function getMode() {
+    var r = document.querySelector('input[name="mode"]:checked');
+    return r ? r.value : 'auto';
+  }
+
+  function setStatus(s) {
+    uiState = s;
+    els.status.setAttribute('data-state', s);
+    els.statusText.textContent = STATUS_TEXT[s] || s;
+  }
+
+  function showError(msg) {
+    els.error.textContent = msg;
+    els.error.hidden = false;
+  }
+  function clearError() {
+    els.error.hidden = true;
+    els.error.textContent = '';
+  }
+
+  function setActiveUI(on) {
+    els.mic.setAttribute('aria-pressed', on ? 'true' : 'false');
+    els.mic.setAttribute('aria-label', on ? 'Зупинити переклад' : 'Почати переклад');
+    els.micLabel.textContent = on ? 'Зупинити' : 'Почати';
+    if (!on) els.mic.style.setProperty('--lvl', '0');
+  }
+
+  function b64FromInt16(i16) {
+    var bytes = new Uint8Array(i16.buffer, i16.byteOffset, i16.byteLength);
+    var s = '';
+    for (var i = 0; i < bytes.length; i += 0x8000) {
+      s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    }
+    return btoa(s);
+  }
+
+  function to16k(f32, rate) {
+    if (rate === 16000) return f32;
+    var ratio = rate / 16000;
+    var n = Math.floor(f32.length / ratio);
+    var out = new Float32Array(n);
+    for (var i = 0; i < n; i++) {
+      var a = Math.floor(i * ratio);
+      var b = Math.max(a + 1, Math.floor((i + 1) * ratio));
+      if (b > f32.length) b = f32.length;
+      var sum = 0;
+      for (var j = a; j < b; j++) sum += f32[j];
+      out[i] = b > a ? sum / (b - a) : 0;
+    }
+    return out;
+  }
+
+  function pcmBase64ToFloat32(b64) {
+    var bin = atob(b64);
+    var n = bin.length >> 1;
+    var f = new Float32Array(n);
+    for (var i = 0; i < n; i++) {
+      var v = bin.charCodeAt(2 * i) | (bin.charCodeAt(2 * i + 1) << 8);
+      if (v & 0x8000) v -= 0x10000;
+      f[i] = v / 32768;
+    }
+    return f;
+  }
+
+  // ---- transcript ----
+  function detectLang(text) {
+    var cyr = (text.match(/[Ѐ-ӿ]/g) || []).length;
+    var lat = (text.match(/[A-Za-zÀ-ÿ]/g) || []).length;
+    if (cyr === 0 && lat === 0) return null;
+    if (cyr > lat) return /[іїєґІЇЄҐ]/.test(text) ? 'UA' : 'RU';
+    return 'IT';
+  }
+
+  function setChip(el, code) {
+    el.textContent = code;
+    el.className = 'lang ' + code.toLowerCase();
+  }
+
+  function newCard() {
+    if (els.empty && els.empty.parentNode) els.empty.parentNode.removeChild(els.empty);
+    var art = document.createElement('article');
+    art.className = 'turn';
+    art.innerHTML =
+      '<div class="dir"><b class="lang ru">RU</b><span>→</span><b class="lang it">IT</b></div>' +
+      '<p class="src"></p><p class="dst"></p>';
+    els.log.appendChild(art);
+    var card = {
+      el: art,
+      from: art.querySelector('.dir b:first-child'),
+      to: art.querySelector('.dir b:last-child'),
+      src: art.querySelector('.src'),
+      dst: art.querySelector('.dst'),
+      inText: '', outText: '', outStarted: false
+    };
+    card.from.hidden = true; card.to.hidden = true;
+    card.el.querySelector('.dir span').hidden = true;
+    return card;
+  }
+
+  function updateDir(card) {
+    var l = detectLang(card.inText);
+    if (!l) return;
+    var target = l === 'IT' ? 'RU' : 'IT';
+    var arrow = card.el.querySelector('.dir span');
+    card.from.hidden = false; card.to.hidden = false; arrow.hidden = false;
+    setChip(card.from, l);
+    setChip(card.to, target);
+  }
+
+  function scrollDown() {
+    var nearBottom = (window.innerHeight + window.scrollY) >= (document.documentElement.scrollHeight - 220);
+    if (nearBottom) window.scrollTo({ top: document.documentElement.scrollHeight });
+  }
+
+  function addIn(text) {
+    if (!cur || cur.outStarted) cur = newCard();
+    cur.inText += text;
+    cur.src.textContent = cur.inText.trim();
+    updateDir(cur);
+    scrollDown();
+  }
+
+  function addOut(text) {
+    if (!cur) cur = newCard();
+    cur.outStarted = true;
+    cur.outText += text;
+    cur.dst.textContent = cur.outText.trim();
+    scrollDown();
+  }
+
+  // ---- playback ----
+  function isPlaying() { return !!outCtx && nextTime > outCtx.currentTime; }
+
+  function playPcm(b64) {
+    if (!outCtx) return;
+    var f = pcmBase64ToFloat32(b64);
+    if (!f.length) return;
+    var buf = outCtx.createBuffer(1, f.length, 24000);
+    buf.copyToChannel(f, 0);
+    var s = outCtx.createBufferSource();
+    s.buffer = buf;
+    s.connect(outCtx.destination);
+    var now = outCtx.currentTime;
+    if (nextTime < now + 0.02) nextTime = now + 0.05;
+    s.start(nextTime);
+    nextTime += buf.duration;
+    sources.add(s);
+    s.onended = function () { sources.delete(s); };
+  }
+
+  function stopPlayback() {
+    sources.forEach(function (s) { try { s.stop(); } catch (e) {} });
+    sources.clear();
+    nextTime = 0;
+  }
+
+  // ---- microphone ----
+  function onMicChunk(f32) {
+    pending.push(f32);
+    pendingLen += f32.length;
+    var need = Math.round(inCtx.sampleRate * 0.04);
+    if (pendingLen < need) return;
+
+    var all = new Float32Array(pendingLen);
+    var off = 0;
+    for (var i = 0; i < pending.length; i++) { all.set(pending[i], off); off += pending[i].length; }
+    pending = []; pendingLen = 0;
+
+    var s16 = to16k(all, inCtx.sampleRate);
+    var sum = 0;
+    for (var k = 0; k < s16.length; k++) sum += s16[k] * s16[k];
+    var rms = Math.sqrt(sum / Math.max(1, s16.length));
+    els.mic.style.setProperty('--lvl', Math.min(1, rms * 7).toFixed(2));
+
+    if (!ws || ws.readyState !== 1 || !ws._ready) return;
+
+    var muted = els.speaker.checked && isPlaying();
+    var i16 = new Int16Array(s16.length);
+    if (!muted) {
+      for (var j = 0; j < s16.length; j++) {
+        var v = Math.max(-1, Math.min(1, s16[j]));
+        i16[j] = v < 0 ? v * 32768 : v * 32767;
+      }
+    }
+    ws.send(JSON.stringify({ realtimeInput: { audio: { data: b64FromInt16(i16), mimeType: 'audio/pcm;rate=16000' } } }));
+  }
+
+  async function setupMic() {
+    var AC = window.AudioContext || window.webkitAudioContext;
+    try { inCtx = new AC({ sampleRate: 16000 }); } catch (e) { inCtx = new AC(); }
+    try { outCtx = new AC({ sampleRate: 24000 }); } catch (e) { outCtx = new AC(); }
+    await inCtx.resume();
+    await outCtx.resume();
+
+    micStream = await navigator.mediaDevices.getUserMedia({
+      audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+    });
+
+    var code =
+      "class Tap extends AudioWorkletProcessor{process(inputs){var c=inputs[0]&&inputs[0][0];" +
+      "if(c){this.port.postMessage(c.slice(0));}return true;}}registerProcessor('pcm-tap',Tap);";
+    var url = URL.createObjectURL(new Blob([code], { type: 'application/javascript' }));
+    await inCtx.audioWorklet.addModule(url);
+    URL.revokeObjectURL(url);
+
+    srcNode = inCtx.createMediaStreamSource(micStream);
+    micNode = new AudioWorkletNode(inCtx, 'pcm-tap');
+    micNode.port.onmessage = function (ev) { onMicChunk(ev.data); };
+    muteNode = inCtx.createGain();
+    muteNode.gain.value = 0;
+    srcNode.connect(micNode);
+    micNode.connect(muteNode);
+    muteNode.connect(inCtx.destination);
+  }
+
+  // ---- websocket session ----
+  function buildSetup(model) {
+    var setup = {
+      model: model.indexOf('models/') === 0 ? model : 'models/' + model,
+      generationConfig: { responseModalities: ['AUDIO'] },
+      systemInstruction: { parts: [{ text: INSTR[getMode()] }] },
+      inputAudioTranscription: {},
+      outputAudioTranscription: {}
+    };
+    if (setupLevel === 0) {
+      setup.realtimeInputConfig = { automaticActivityDetection: { silenceDurationMs: 500 } };
+      setup.sessionResumption = resumeHandle ? { handle: resumeHandle } : {};
+      setup.contextWindowCompression = { slidingWindow: {} };
+    }
+    return { setup: setup };
+  }
+
+  function connect() {
+    if (!active) return;
+    var key = els.key.value.trim();
+    var model = (els.model.value.trim() || 'gemini-3.8-live');
+    var url = 'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=' + encodeURIComponent(key);
+    var sock;
+    try { sock = new WebSocket(url); } catch (e) { fail('Не вдалося відкрити з’єднання: ' + e.message); return; }
+    sock.binaryType = 'arraybuffer';
+    sock._ready = false;
+    ws = sock;
+
+    sock.onopen = function () { sock.send(JSON.stringify(buildSetup(model))); };
+
+    sock.onmessage = function (ev) {
+      var txt = typeof ev.data === 'string' ? ev.data : new TextDecoder().decode(ev.data);
+      var msg;
+      try { msg = JSON.parse(txt); } catch (e) { return; }
+      handleMessage(sock, msg);
+    };
+
+    sock.onerror = function () {};
+
+    sock.onclose = function (ev) {
+      if (sock !== ws) return;
+      var wasReady = !!sock._ready;
+      ws = null;
+      lastClose = 'Код ' + ev.code + (ev.reason ? ': ' + ev.reason : '') +
+        (ev.code === 1006 ? '. Перевір інтернет і ключ API.' : '');
+      if (!active) return;
+
+      if (!wasReady && !everReady && setupLevel === 0) {
+        setupLevel = 1;
+        setStatus('connecting');
+        connect();
+        return;
+      }
+      if (!wasReady && !everReady) {
+        fail('Сервер не прийняв з’єднання. ' + lastClose);
+        return;
+      }
+      retries++;
+      if (retries > 6) { fail('Не вдалося перепідключитися. ' + lastClose); return; }
+      setStatus('reconnecting');
+      setTimeout(function () { if (active && !ws) connect(); }, Math.min(400 * retries, 3000));
+    };
+  }
+
+  function restartSession() {
+    if (!active) return;
+    var old = ws;
+    ws = null;
+    if (old) { try { old.close(1000); } catch (e) {} }
+    setStatus('reconnecting');
+    connect();
+  }
+
+  function handleMessage(sock, msg) {
+    if (sock !== ws) return;
+
+    if (msg.setupComplete !== undefined) {
+      sock._ready = true;
+      everReady = true;
+      retries = 0;
+      setStatus('live');
+      return;
+    }
+    if (msg.sessionResumptionUpdate) {
+      var u = msg.sessionResumptionUpdate;
+      if (u.newHandle && u.resumable !== false) resumeHandle = u.newHandle;
+      return;
+    }
+    if (msg.goAway) { restartSession(); return; }
+
+    var sc = msg.serverContent;
+    if (!sc) return;
+    if (sc.interrupted) stopPlayback();
+    if (sc.modelTurn && sc.modelTurn.parts) {
+      for (var i = 0; i < sc.modelTurn.parts.length; i++) {
+        var p = sc.modelTurn.parts[i];
+        if (p.inlineData && p.inlineData.data) playPcm(p.inlineData.data);
+      }
+    }
+    if (sc.inputTranscription && sc.inputTranscription.text) addIn(sc.inputTranscription.text);
+    if (sc.outputTranscription && sc.outputTranscription.text) addOut(sc.outputTranscription.text);
+    if (sc.turnComplete) cur = null;
+  }
+
+  // ---- start / stop ----
+  async function requestWakeLock() {
+    try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch (e) {}
+  }
+
+  function fail(msg) {
+    showError(msg);
+    stop(true);
+  }
+
+  async function start() {
+    clearError();
+    var key = els.key.value.trim();
+    if (!key) {
+      showError('Встав ключ Gemini API в налаштуваннях.');
+      els.settings.open = true;
+      els.key.focus();
+      return;
+    }
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.AudioWorklet) {
+      showError('Браузер не дає доступу до мікрофона. Відкрий сторінку в Chrome за адресою https://.');
+      return;
+    }
+    LS.set('gt_key', key);
+    active = true; everReady = false; setupLevel = 0; retries = 0; resumeHandle = null; cur = null;
+    setActiveUI(true);
+    setStatus('connecting');
+    try {
+      await setupMic();
+    } catch (e) {
+      var denied = e && (e.name === 'NotAllowedError' || e.name === 'SecurityError');
+      fail(denied
+        ? 'Немає дозволу на мікрофон. Дозволь його в налаштуваннях сайту в браузері й спробуй ще раз.'
+        : 'Не вдалося запустити мікрофон: ' + (e && e.message ? e.message : e));
+      return;
+    }
+    if (!active) return;
+    requestWakeLock();
+    connect();
+  }
+
+  function stop(keepError) {
+    active = false;
+    var old = ws; ws = null;
+    if (old) { try { old.close(1000); } catch (e) {} }
+    try { if (micNode) { micNode.port.onmessage = null; micNode.disconnect(); } } catch (e) {}
+    try { if (srcNode) srcNode.disconnect(); } catch (e) {}
+    try { if (muteNode) muteNode.disconnect(); } catch (e) {}
+    if (micStream) micStream.getTracks().forEach(function (t) { t.stop(); });
+    stopPlayback();
+    try { if (inCtx) inCtx.close(); } catch (e) {}
+    try { if (outCtx) outCtx.close(); } catch (e) {}
+    inCtx = outCtx = micStream = srcNode = micNode = muteNode = null;
+    pending = []; pendingLen = 0; cur = null;
+    try { if (wakeLock) wakeLock.release(); } catch (e) {}
+    wakeLock = null;
+    setActiveUI(false);
+    setStatus(keepError === true ? 'error' : 'idle');
+  }
+
+  // ---- UI wiring ----
+  els.mic.addEventListener('click', function () { if (active) stop(); else start(); });
+
+  els.clear.addEventListener('click', function () {
+    els.log.innerHTML = '';
+    cur = null;
+  });
+
+  els.showKey.addEventListener('click', function () {
+    var hidden = els.key.type === 'password';
+    els.key.type = hidden ? 'text' : 'password';
+    els.showKey.textContent = hidden ? 'Сховати' : 'Показати';
+  });
+
+  els.key.addEventListener('change', function () { LS.set('gt_key', els.key.value.trim()); });
+  els.model.addEventListener('change', function () { LS.set('gt_model', els.model.value.trim()); });
+  els.speaker.addEventListener('change', function () { LS.set('gt_speaker', els.speaker.checked ? '1' : '0'); });
+
+  Array.prototype.forEach.call(document.querySelectorAll('input[name="mode"]'), function (r) {
+    r.addEventListener('change', function () {
+      LS.set('gt_mode', getMode());
+      if (active) { resumeHandle = null; restartSession(); }
+    });
+  });
+
+  document.addEventListener('visibilitychange', function () {
+    if (active && document.visibilityState === 'visible') requestWakeLock();
+  });
+
+  setInterval(function () {
+    if (!active || !ws || !ws._ready) return;
+    var next = isPlaying() ? 'speak' : 'live';
+    if (next !== uiState) setStatus(next);
+  }, 200);
+
+  // restore saved settings
+  var savedKey = LS.get('gt_key');
+  if (savedKey) els.key.value = savedKey;
+  var savedModel = LS.get('gt_model');
+  if (savedModel) els.model.value = savedModel;
+  els.speaker.checked = LS.get('gt_speaker') === '1';
+  var savedMode = LS.get('gt_mode');
+  if (savedMode) {
+    var radio = document.querySelector('input[name="mode"][value="' + savedMode + '"]');
+    if (radio) radio.checked = true;
+  }
+  els.settings.open = !savedKey;
+  setStatus('idle');
+})();
+</script>
+</body>
+</html>
